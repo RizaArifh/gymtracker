@@ -8,7 +8,7 @@ class BodyMeasurementImageParser
     {
         $normalized = $this->normalize($ocrText);
 
-        return [
+        $parsed = [
             'height_cm' => $this->firstFloatInRange($normalized, [
                 '/h[e3][i1l][gq][h]?t[^\d]{0,24}(\d{2,3}(?:\.\d+)?)/i',
                 '/height[^\d]{0,24}(\d{2,3}(?:\.\d+)?)/i',
@@ -49,6 +49,8 @@ class BodyMeasurementImageParser
                 '/physical\s*age[^\d]{0,10}(\d{1,3})/i',
             ]),
         ];
+
+        return $this->applyFallbacks($normalized, $parsed);
     }
 
     private function normalize(string $text): string
@@ -97,5 +99,34 @@ class BodyMeasurementImageParser
         }
 
         return null;
+    }
+
+    private function applyFallbacks(string $text, array $parsed): array
+    {
+        preg_match_all('/(\d{1,3}(?:\.\d+)?)/', $text, $matches);
+        $numbers = array_map('floatval', $matches[1] ?? []);
+
+        if (empty($parsed['weight_kg'])) {
+            $weightCandidates = array_values(array_filter($numbers, fn ($v) => $v >= 35 && $v <= 220));
+            if (! empty($weightCandidates)) {
+                $parsed['weight_kg'] = $weightCandidates[0];
+            }
+        }
+
+        if (empty($parsed['height_cm'])) {
+            $heightCandidates = array_values(array_filter($numbers, fn ($v) => $v >= 120 && $v <= 230));
+            if (! empty($heightCandidates)) {
+                $parsed['height_cm'] = $heightCandidates[0];
+            }
+        }
+
+        if (empty($parsed['body_fat_percentage'])) {
+            $fatCandidates = array_values(array_filter($numbers, fn ($v) => $v >= 5 && $v <= 60));
+            if (! empty($fatCandidates)) {
+                $parsed['body_fat_percentage'] = $fatCandidates[0];
+            }
+        }
+
+        return $parsed;
     }
 }

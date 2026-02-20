@@ -340,7 +340,9 @@
                     setValue(fieldMap[key], parsed[key]);
                 });
 
-                statusEl.textContent = 'Preview siap. Silakan review dan simpan.';
+                statusEl.textContent = data.warning
+                    ? ('Preview siap. ' + data.warning)
+                    : 'Preview siap. Silakan review dan simpan.';
                 modal.style.display = 'block';
             } catch (err) {
                 statusEl.textContent = 'Terjadi kesalahan jaringan saat OCR.';
@@ -351,3 +353,4 @@
     })();
 </script>
 @endpush
+
