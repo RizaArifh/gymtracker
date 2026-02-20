@@ -1,9 +1,64 @@
 @extends('layouts.app', ['title' => 'Body Measurements'])
 
 @section('content')
+    <style>
+        .mobile-shell { max-width: 560px; margin: 0 auto; }
+        .section-title { margin: 0; font-size: 1.1rem; }
+        .upload-preview-box {
+            border: 1px dashed #b7c2cf;
+            border-radius: 10px;
+            background: #f9fbfd;
+            padding: 10px;
+            margin-top: 6px;
+        }
+        .upload-preview-box img {
+            width: 100%;
+            max-height: 260px;
+            object-fit: contain;
+            border-radius: 8px;
+            display: none;
+        }
+        .measure-cards { display: none; gap: 10px; flex-direction: column; }
+        .measure-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: #fff; }
+        .measure-card h4 { margin: 0 0 8px 0; }
+        .measure-meta { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+        .measure-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 14px; margin-bottom: 10px; }
+        .modal-panel {
+            max-width: 920px;
+            width: 95%;
+            margin: 4vh auto;
+            background: #fff;
+            border-radius: 14px;
+            padding: 16px;
+            max-height: 92vh;
+            overflow: auto;
+        }
+        .review-image {
+            width: 100%;
+            max-height: 280px;
+            object-fit: contain;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #f8fbff;
+            margin-bottom: 12px;
+        }
+        @media (max-width: 720px) {
+            .mobile-shell { max-width: 100%; }
+            .desktop-table { display: none; }
+            .measure-cards { display: flex; }
+            .modal-panel {
+                width: 100%;
+                margin: 16vh 0 0 0;
+                border-radius: 16px 16px 0 0;
+                max-height: 84vh;
+            }
+        }
+    </style>
+
+<div class="mobile-shell">
     <div class="card">
         <div class="actions between">
-            <h1 style="margin:0;">Body Measurements</h1>
+            <h1 class="section-title">Body Measurements</h1>
             <a class="btn" href="{{ route('body-measurements.create') }}">+ Tambah Measurement</a>
         </div>
     </div>
@@ -21,6 +76,10 @@
                 <label for="measurement_image">Foto Hasil Scan</label>
                 <input type="file" id="measurement_image" name="measurement_image" accept=".jpg,.jpeg,.png,.webp" required>
                 <span class="help">Format: JPG/PNG/WEBP, max 8MB</span>
+                <div class="upload-preview-box">
+                    <img id="uploadImagePreview" alt="Preview upload image">
+                    <span id="uploadImageHint" class="muted">Preview gambar akan tampil di sini.</span>
+                </div>
             </div>
             <div class="actions">
                 <button class="btn" type="submit" id="previewBtn">Upload & Review</button>
@@ -30,7 +89,7 @@
     </div>
 
     <div class="card">
-        <table>
+        <table class="desktop-table">
             <thead>
                 <tr>
                     <th>Tanggal</th>
@@ -69,15 +128,43 @@
             </tbody>
         </table>
 
+        <div class="measure-cards">
+            @forelse($measurements as $item)
+                <div class="measure-card">
+                    <h4>{{ $item->measurement_date->format('d M Y') }}</h4>
+                    <div class="measure-meta">Scan body composition</div>
+                    <div class="measure-grid">
+                        <div><strong>Tinggi:</strong> {{ $item->height_cm ?? '-' }} cm</div>
+                        <div><strong>Berat:</strong> {{ $item->weight_kg }} kg</div>
+                        <div><strong>Body Fat:</strong> {{ $item->body_fat_percentage ?? '-' }} %</div>
+                        <div><strong>Muscle:</strong> {{ $item->muscle_mass_kg ?? '-' }} kg</div>
+                        <div><strong>BMI:</strong> {{ $item->bmi ?? '-' }}</div>
+                    </div>
+                    <div class="actions">
+                        <a class="btn secondary" href="{{ route('body-measurements.show', $item) }}">Detail</a>
+                        <a class="btn secondary" href="{{ route('body-measurements.edit', $item) }}">Edit</a>
+                        <form method="POST" action="{{ route('body-measurements.destroy', $item) }}" onsubmit="return confirm('Hapus data ini?')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn danger" type="submit">Hapus</button>
+                        </form>
+                    </div>
+                </div>
+            @empty
+                <div class="muted">Belum ada data.</div>
+            @endforelse
+        </div>
+
         <div style="margin-top: 12px;">{{ $measurements->links() }}</div>
     </div>
 
     <div id="previewModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000;">
-        <div style="max-width:900px; width:95%; margin:4vh auto; background:#fff; border-radius:12px; padding:16px; max-height:92vh; overflow:auto;">
+        <div class="modal-panel">
             <div class="actions between" style="margin-bottom:12px;">
                 <h2 style="margin:0;">Review Data OCR</h2>
                 <button type="button" class="btn danger" id="closePreviewModal">Tutup</button>
             </div>
+            <img id="rv_image_preview" class="review-image" alt="Review uploaded image">
 
             <form method="POST" action="{{ route('body-measurements.store-imported-preview', [], false) }}" id="reviewSaveForm">
                 @csrf
@@ -156,6 +243,7 @@
             </form>
         </div>
     </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -168,6 +256,11 @@
         const modal = document.getElementById('previewModal');
         const closeBtn = document.getElementById('closePreviewModal');
         const previewBtn = document.getElementById('previewBtn');
+        const fileInput = document.getElementById('measurement_image');
+        const uploadImagePreview = document.getElementById('uploadImagePreview');
+        const uploadImageHint = document.getElementById('uploadImageHint');
+        const reviewImage = document.getElementById('rv_image_preview');
+        let localPreviewUrl = '';
 
         const fieldMap = {
             measurement_date: 'rv_measurement_date',
@@ -190,6 +283,20 @@
             if (!el) return;
             el.value = value ?? '';
         }
+
+        function showLocalPreview(file) {
+            if (!file) return;
+            if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+            localPreviewUrl = URL.createObjectURL(file);
+            uploadImagePreview.src = localPreviewUrl;
+            uploadImagePreview.style.display = 'block';
+            uploadImageHint.style.display = 'none';
+        }
+
+        fileInput?.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            showLocalPreview(file);
+        });
 
         closeBtn?.addEventListener('click', () => {
             modal.style.display = 'none';
@@ -225,6 +332,7 @@
                 setValue(fieldMap.measurement_date, data.measurement_date);
                 setValue(fieldMap.source_image_path, data.source_image_path);
                 setValue(fieldMap.source_ocr_text, data.source_ocr_text);
+                reviewImage.src = data.source_image_url || localPreviewUrl || '';
 
                 const parsed = data.parsed || {};
                 Object.keys(fieldMap).forEach((key) => {

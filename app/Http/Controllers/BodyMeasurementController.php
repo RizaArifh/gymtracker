@@ -147,6 +147,7 @@ class BodyMeasurementController extends Controller
             'message' => 'Preview OCR berhasil dibuat.',
             'measurement_date' => $validated['measurement_date'] ?? now()->toDateString(),
             'source_image_path' => $path,
+            'source_image_url' => Storage::url($path),
             'source_ocr_text' => $ocrText,
             'parsed' => $parsed,
         ]);
@@ -193,7 +194,7 @@ class BodyMeasurementController extends Controller
 
     private function isTesseractAvailable(): bool
     {
-        $process = new Process(['tesseract', '--version']);
+        $process = new Process([$this->resolveTesseractBinary(), '--version']);
         $process->run();
 
         return $process->isSuccessful();
@@ -201,22 +202,54 @@ class BodyMeasurementController extends Controller
 
     private function runTesseract(string $filePath): string
     {
-        $process = new Process([
-            'tesseract',
-            $filePath,
-            'stdout',
-            '-l',
-            'eng',
-            '--psm',
-            '6',
-        ]);
-        $process->setTimeout(45);
-        $process->run();
+        $binary = $this->resolveTesseractBinary();
+        $modes = ['6', '11', '4'];
+        $outputs = [];
 
-        if (! $process->isSuccessful()) {
+        foreach ($modes as $psm) {
+            $process = new Process([
+                $binary,
+                $filePath,
+                'stdout',
+                '-l',
+                'eng',
+                '--oem',
+                '1',
+                '--psm',
+                $psm,
+                '-c',
+                'preserve_interword_spaces=1',
+            ]);
+            $process->setTimeout(60);
+            $process->run();
+
+            if ($process->isSuccessful()) {
+                $text = trim($process->getOutput());
+                if ($text !== '') {
+                    $outputs[] = $text;
+                }
+            }
+        }
+
+        if (empty($outputs)) {
             return '';
         }
 
-        return trim($process->getOutput());
+        return trim(implode("\n", array_unique($outputs)));
+    }
+
+    private function resolveTesseractBinary(): string
+    {
+        $fromEnv = env('TESSERACT_PATH');
+        if (is_string($fromEnv) && $fromEnv !== '') {
+            return $fromEnv;
+        }
+
+        $windowsDefault = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe';
+        if (PHP_OS_FAMILY === 'Windows' && file_exists($windowsDefault)) {
+            return $windowsDefault;
+        }
+
+        return 'tesseract';
     }
 }
