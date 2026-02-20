@@ -1,0 +1,26 @@
+version: "1"
+services:
+  - type: web
+    name: gymtracker
+    runtime: docker
+    repo: https://github.com/RizaArifh/gymtracker
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: APP_NAME
+        value: GymTracker
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        sync: false
+      - key: APP_KEY
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: sqlite
+      - key: DB_DATABASE
+        value: /app/database/database.sqlite
