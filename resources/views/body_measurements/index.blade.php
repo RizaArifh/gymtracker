@@ -11,7 +11,7 @@
     <div class="card">
         <h2 style="margin-bottom: 8px;">Import dari Foto Mesin</h2>
         <p class="muted">Upload foto hasil body analyzer. Sistem akan OCR, lalu tampilkan popup review sebelum simpan.</p>
-        <form id="importPreviewForm" method="POST" action="{{ route('body-measurements.import-image') }}" enctype="multipart/form-data" class="grid grid-2">
+        <form id="importPreviewForm" method="POST" action="{{ route('body-measurements.import-image', [], false) }}" enctype="multipart/form-data" class="grid grid-2">
             @csrf
             <div>
                 <label for="measurement_date">Tanggal Measurement</label>
@@ -79,7 +79,7 @@
                 <button type="button" class="btn danger" id="closePreviewModal">Tutup</button>
             </div>
 
-            <form method="POST" action="{{ route('body-measurements.store-imported-preview') }}" id="reviewSaveForm">
+            <form method="POST" action="{{ route('body-measurements.store-imported-preview', [], false) }}" id="reviewSaveForm">
                 @csrf
                 <input type="hidden" name="source_image_path" id="rv_source_image_path">
                 <textarea name="source_ocr_text" id="rv_source_ocr_text" style="display:none;"></textarea>
