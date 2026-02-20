@@ -2,7 +2,7 @@
 FROM php:8.3-cli
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git unzip libzip-dev \
+    && apt-get install -y --no-install-recommends git unzip libzip-dev tesseract-ocr tesseract-ocr-eng \
     && docker-php-ext-install pdo pdo_sqlite mbstring zip bcmath \
     && rm -rf /var/lib/apt/lists/*
 
