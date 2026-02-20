@@ -12,12 +12,47 @@ class DailyTaskController extends Controller
      */
     public function index()
     {
-        $tasks = DailyTask::query()
+        $query = DailyTask::query();
+
+        if (request('status') === 'done') {
+            $query->where('is_completed', true);
+        } elseif (request('status') === 'pending') {
+            $query->where('is_completed', false);
+        }
+
+        if (filled(request('task_date'))) {
+            $query->whereDate('task_date', request('task_date'));
+        }
+
+        if (filled(request('q'))) {
+            $term = request('q');
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', '%'.$term.'%')
+                    ->orWhere('category', 'like', '%'.$term.'%');
+            });
+        }
+
+        $tasks = $query
             ->orderByDesc('task_date')
             ->latest('id')
             ->paginate(10);
 
-        return view('daily_tasks.index', compact('tasks'));
+        $statsQuery = DailyTask::query();
+        if (filled(request('task_date'))) {
+            $statsQuery->whereDate('task_date', request('task_date'));
+        }
+        $totalTasks = (clone $statsQuery)->count();
+        $completedTasks = (clone $statsQuery)->where('is_completed', true)->count();
+        $completionPercentage = $totalTasks > 0
+            ? (int) round(($completedTasks / $totalTasks) * 100)
+            : 0;
+
+        return view('daily_tasks.index', [
+            'tasks' => $tasks,
+            'totalTasks' => $totalTasks,
+            'completedTasks' => $completedTasks,
+            'completionPercentage' => $completionPercentage,
+        ]);
     }
 
     /**
@@ -108,5 +143,43 @@ class DailyTaskController extends Controller
         return redirect()
             ->route('daily-tasks.index')
             ->with('success', 'Daily task deleted.');
+    }
+
+    public function toggle(DailyTask $dailyTask)
+    {
+        request()->validate([
+            'is_completed' => ['required', 'boolean'],
+        ]);
+
+        $dailyTask->update([
+            'is_completed' => request()->boolean('is_completed'),
+        ]);
+
+        $taskDate = $dailyTask->task_date?->toDateString();
+        $stats = DailyTask::query()
+            ->whereDate('task_date', $taskDate)
+            ->selectRaw('count(*) as total_count')
+            ->selectRaw('sum(case when is_completed = 1 then 1 else 0 end) as completed_count')
+            ->first();
+
+        $totalCount = (int) ($stats->total_count ?? 0);
+        $completedCount = (int) ($stats->completed_count ?? 0);
+        $completionPercentage = $totalCount > 0
+            ? (int) round(($completedCount / $totalCount) * 100)
+            : 0;
+
+        if (! request()->expectsJson()) {
+            return redirect()
+                ->route('daily-tasks.index')
+                ->with('success', 'Task status updated.');
+        }
+
+        return response()->json([
+            'id' => $dailyTask->id,
+            'is_completed' => (bool) $dailyTask->is_completed,
+            'total_count' => $totalCount,
+            'completed_count' => $completedCount,
+            'completion_percentage' => $completionPercentage,
+        ]);
     }
 }

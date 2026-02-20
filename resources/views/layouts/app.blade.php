@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'Gym Tracker' }}</title>
     <style>
         :root {
@@ -88,15 +89,24 @@
             text-decoration: none;
             display: inline-block;
             cursor: pointer;
+            font-size: 14px;
         }
         .btn.secondary { background: #415a77; }
         .btn.danger { background: var(--danger); }
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .actions.between { justify-content: space-between; align-items: center; }
         label {
             display: block;
             margin-bottom: 6px;
             font-weight: 600;
             font-size: 14px;
+        }
+        .help {
+            display: block;
+            margin-top: -8px;
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 12px;
         }
         input, select, textarea {
             width: 100%;
@@ -105,6 +115,17 @@
             border-radius: 8px;
             margin-bottom: 12px;
             background: #fff;
+        }
+        input.is-invalid, select.is-invalid, textarea.is-invalid {
+            border-color: var(--danger);
+            box-shadow: 0 0 0 2px rgba(184, 59, 94, .14);
+        }
+        .field-error {
+            display: block;
+            color: var(--danger);
+            font-size: 12px;
+            margin-top: -8px;
+            margin-bottom: 10px;
         }
         .flash {
             padding: 10px 12px;
@@ -131,6 +152,35 @@
         }
         .pill.ok { background: #daf6e8; color: #157347; }
         .pill.wait { background: #ffe9b8; color: #8a5a00; }
+        .task-cards {
+            display: none;
+            gap: 10px;
+            flex-direction: column;
+        }
+        .task-card {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .progress-wrap {
+            width: 100%;
+            height: 10px;
+            border-radius: 999px;
+            background: #d9e2ec;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00a896, #028090);
+            transition: width .25s ease;
+        }
+        @media (max-width: 720px) {
+            .container { padding: 12px; }
+            .topbar .container { display: block; }
+            .nav a { margin-bottom: 8px; }
+            .desktop-table { display: none; }
+            .task-cards { display: flex; }
+        }
     </style>
 </head>
 <body>
@@ -152,16 +202,71 @@
 
     @if($errors->any())
         <div class="error-box">
-            <strong>Validation errors:</strong>
-            <ul>
-                @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
+            <strong>Validation errors ditemukan. Cek field yang ditandai merah.</strong>
         </div>
     @endif
 
     @yield('content')
 </main>
+<script>
+    document.querySelectorAll('input, select, textarea').forEach((field) => {
+        field.addEventListener('invalid', () => field.classList.add('is-invalid'));
+        field.addEventListener('input', () => {
+            if (field.checkValidity()) field.classList.remove('is-invalid');
+        });
+        field.addEventListener('change', () => {
+            if (field.checkValidity()) field.classList.remove('is-invalid');
+        });
+    });
+
+    document.querySelectorAll('form[data-auto-submit]').forEach((form) => {
+        const checkbox = form.querySelector('input[type="checkbox"][name="is_completed"]');
+        if (!checkbox) return;
+        checkbox.addEventListener('change', () => {
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const formData = new FormData(form);
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrf,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                    body: formData,
+                });
+                if (!response.ok) throw new Error('Request failed');
+                const data = await response.json();
+                const row = form.closest('[data-task-item]');
+                if (row) {
+                    const pill = row.querySelector('[data-task-pill]');
+                    if (pill) {
+                        pill.className = 'pill ' + (data.is_completed ? 'ok' : 'wait');
+                        pill.textContent = data.is_completed ? 'Done' : 'Pending';
+                    }
+                }
+                const summary = document.querySelector('[data-task-summary]');
+                if (summary) {
+                    summary.textContent = data.completed_count + '/' + data.total_count;
+                }
+                const bar = document.querySelector('[data-task-progress]');
+                if (bar) {
+                    bar.style.width = data.completion_percentage + '%';
+                }
+                const percent = document.querySelector('[data-task-percent]');
+                if (percent) {
+                    percent.textContent = data.completion_percentage + '%';
+                }
+            } catch (_) {
+                window.location.reload();
+            }
+        });
+    });
+</script>
+@stack('scripts')
 </body>
 </html>
